@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Lock, User } from 'lucide-react'
+import { X, Lock, Mail } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 type AuthMode = 'login' | 'register'
 
@@ -13,7 +14,7 @@ interface AuthModalProps {
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [mode, setMode] = useState<AuthMode>('login')
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: '',
   })
   const [isLoading, setIsLoading] = useState(false)
@@ -27,72 +28,57 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsLoading(true)
 
     try {
-      const username = formData.username.trim()
-      if (!username) {
-        setError('用户名不能为空')
+      const email = formData.email.trim()
+      const password = formData.password
+
+      if (!email) {
+        setError('邮箱不能为空')
         setIsLoading(false)
         return
       }
 
-      // 本地用户库（静态站点无后端，使用 localStorage 持久化）
-      const USERS_KEY = 'bazi_users'
-      const hash = (s: string) => {
-        // 简单不可逆混淆（非真正安全，仅防止明文 localStorage）
-        let h = 5381
-        for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-        return String(h)
-      }
-      const loadUsers = (): Record<string, string> => {
-        try {
-          return JSON.parse(localStorage.getItem(USERS_KEY) || '{}')
-        } catch {
-          return {}
-        }
-      }
-      const saveUsers = (u: Record<string, string>) => {
-        localStorage.setItem(USERS_KEY, JSON.stringify(u))
-      }
-
-      const users = loadUsers()
-
       if (mode === 'register') {
-        if (formData.password.length < 6) {
-          setError('密码长度至少6位')
+        if (password.length < 6) {
+          setError('密码长度至少 6 位')
           setIsLoading(false)
           return
         }
-        if (users[username]) {
-          setError('该用户名已被注册')
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+        })
+        if (signUpError) {
+          setError(translateError(signUpError.message))
           setIsLoading(false)
           return
         }
-        users[username] = hash(formData.password)
-        saveUsers(users)
-        localStorage.setItem('user_token', 'demo_user_token')
-        localStorage.setItem('username', username)
+        // 若开启了"邮箱验证"，session 会为 null，需用户去邮箱点确认链接
+        if (!data.session) {
+          alert('注册成功！请前往邮箱点击确认链接以完成验证后再登录。')
+          setMode('login')
+          setIsLoading(false)
+          return
+        }
         alert('注册成功！')
         onClose()
         window.location.reload()
       } else {
-        const stored = users[username]
-        if (!stored) {
-          setError('该用户尚未注册，请先注册')
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (signInError) {
+          setError(translateError(signInError.message))
           setIsLoading(false)
           return
         }
-        if (stored !== hash(formData.password)) {
-          setError('用户名或密码错误')
-          setIsLoading(false)
-          return
-        }
-        localStorage.setItem('user_token', 'demo_user_token')
-        localStorage.setItem('username', username)
         alert('登录成功！')
         onClose()
         window.location.reload()
       }
     } catch (err) {
-      setError('操作失败，请重试')
+      console.error(err)
+      setError('网络错误，请稍后重试')
     } finally {
       setIsLoading(false)
     }
@@ -101,22 +87,18 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const switchMode = () => {
     setMode(mode === 'login' ? 'register' : 'login')
     setError('')
-    setFormData({
-      username: '',
-      password: '',
-    })
+    setFormData({ email: '', password: '' })
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
       {/* 背景遮罩 */}
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
-      
+
       {/* 登录/注册卡片 */}
       <div className="relative bg-bazi-card border-2 border-bazi-gold rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-[0_0_60px_rgba(201,168,76,0.5)] animate-fade-in-up">
-        {/* 金色光晕 */}
         <div className="absolute -inset-1 bg-gradient-to-r from-bazi-gold via-bazi-gold-light to-bazi-gold rounded-2xl opacity-20 blur-xl" />
-        
+
         <div className="relative">
           {/* 标题 */}
           <div className="flex items-center justify-between mb-6">
@@ -141,18 +123,18 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
           {/* 表单 */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* 用户名 */}
+            {/* 邮箱 */}
             <div>
               <label className="block text-sm font-medium text-bazi-text mb-2">
-                用户名 <span className="text-red-500">*</span>
+                邮箱 <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-bazi-muted" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-bazi-muted" />
                 <input
-                  type="text"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  placeholder="请输入用户名"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="请输入邮箱"
                   required
                   className="w-full pl-10 pr-4 py-3 bg-bazi-bg border-2 border-bazi-border rounded-lg focus:border-bazi-gold focus:outline-none transition-all"
                 />
@@ -170,7 +152,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder={mode === 'register' ? '至少6位密码' : '请输入密码'}
+                  placeholder={mode === 'register' ? '至少 6 位密码' : '请输入密码'}
                   required
                   minLength={mode === 'register' ? 6 : undefined}
                   className="w-full pl-10 pr-4 py-3 bg-bazi-bg border-2 border-bazi-border rounded-lg focus:border-bazi-gold focus:outline-none transition-all"
@@ -207,37 +189,20 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               </button>
             </p>
           </div>
-
-          {/* 第三方登录 (可选) */}
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-bazi-border"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-bazi-card text-bazi-muted">或使用以下方式</span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                className="px-4 py-3 bg-bazi-bg border-2 border-bazi-border hover:border-bazi-gold rounded-lg transition-all flex items-center justify-center gap-2"
-              >
-                <span className="text-xl">📱</span>
-                <span className="text-sm text-bazi-text">微信</span>
-              </button>
-              <button
-                type="button"
-                className="px-4 py-3 bg-bazi-bg border-2 border-bazi-border hover:border-bazi-gold rounded-lg transition-all flex items-center justify-center gap-2"
-              >
-                <span className="text-xl">🔑</span>
-                <span className="text-sm text-bazi-text">Google</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
   )
+}
+
+// 把 Supabase 的英文错误信息翻译成中文
+function translateError(msg: string): string {
+  const m = msg.toLowerCase()
+  if (m.includes('invalid login credentials')) return '邮箱或密码错误'
+  if (m.includes('user already registered')) return '该邮箱已被注册，请直接登录'
+  if (m.includes('email not confirmed')) return '邮箱尚未验证，请前往邮箱点击确认链接'
+  if (m.includes('password should be at least')) return '密码长度至少 6 位'
+  if (m.includes('unable to validate email')) return '邮箱格式不正确'
+  if (m.includes('rate limit')) return '操作过于频繁，请稍后再试'
+  return msg
 }

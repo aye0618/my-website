@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Globe, Menu, X, User, LogOut } from 'lucide-react'
 import AuthModal from './AuthModal'
+import { supabase } from '@/lib/supabase'
 
 type TabType = 'home' | 'paipan' | 'yijing' | 'hepan' | 'dayun'
 
@@ -27,9 +28,17 @@ export default function Navbar({ onTabChange }: NavbarProps) {
   }, [])
 
   useEffect(() => {
-    // 检查登录状态
-    const storedUsername = localStorage.getItem('username')
-    setUsername(storedUsername)
+    // 从 Supabase 读取当前 session
+    supabase.auth.getSession().then(({ data }) => {
+      setUsername(data.session?.user?.email ?? null)
+    })
+    // 监听登录/登出变化
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUsername(session?.user?.email ?? null)
+    })
+    return () => {
+      sub.subscription.unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
@@ -47,9 +56,8 @@ export default function Navbar({ onTabChange }: NavbarProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showUserMenu])
 
-  const handleLogout = () => {
-    localStorage.removeItem('user_token')
-    localStorage.removeItem('username')
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
     setUsername(null)
     setShowUserMenu(false)
     window.location.reload()
