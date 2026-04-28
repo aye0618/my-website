@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>功能测试</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #0a0b0f;
+      color: #e8e0d0;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 20px;
+      border: 1px solid #2a2d38;
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      background: #c9a84c;
+      color: #0a0b0f;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #f0d078;
+    }
+    .result {
+      margin-top: 10px;
+      padding: 10px;
+      background: #12141a;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>八字网站功能测试</h1>
+  
+  <div class="test-section">
+    <h2>1. 测试 API 连接</h2>
+    <button onclick="testAPI()">测试 API</button>
+    <div id="api-result" class="result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>2. 测试生辰解析</h2>
+    <input type="text" id="birth-input" value="1990年5月15日 10时30分 男" style="width: 300px; padding: 8px;">
+    <button onclick="testParse()">解析</button>
+    <div id="parse-result" class="result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>3. 测试页面导航</h2>
+    <p>打开浏览器控制台，检查是否有 JavaScript 错误</p>
+    <button onclick="window.location.href='http://localhost:3000'">打开主页</button>
+  </div>
+
+  <script>
+    async function testAPI() {
+      const result = document.getElementById('api-result')
+      result.textContent = '测试中...'
+      
+      try {
+        const response = await fetch('http://localhost:3000/api/bazi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            year: 1990,
+            month: 5,
+            day: 15,
+            hour: 10,
+            minute: 30,
+            gender: 'male'
+          })
+        })
+        
+        const data = await response.json()
+        result.textContent = `✅ API 正常\n状态: ${response.status}\n成功: ${data.success}`
+      } catch (error) {
+        result.textContent = `❌ API 错误: ${error.message}`
+      }
+    }
+
+    function testParse() {
+      const input = document.getElementById('birth-input').value
+      const result = document.getElementById('parse-result')
+      
+      // 简单的解析测试
+      const dateMatch = input.match(/(\d{4})[年\-](\d{1,2})[月\-](\d{1,2})[日]?/)
+      const timeMatch = input.match(/(\d{1,2})[时:](\d{1,2})[分]?/)
+      const gender = input.includes('女') ? '女' : '男'
+      
+      if (dateMatch && timeMatch) {
+        result.textContent = `✅ 解析成功\n年: ${dateMatch[1]}\n月: ${dateMatch[2]}\n日: ${dateMatch[3]}\n时: ${timeMatch[1]}\n分: ${timeMatch[2]}\n性别: ${gender}`
+      } else {
+        result.textContent = '❌ 解析失败'
+      }
+    }
+  </script>
+</body>
+</html>
