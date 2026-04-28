@@ -27,32 +27,68 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsLoading(true)
 
     try {
+      const username = formData.username.trim()
+      if (!username) {
+        setError('用户名不能为空')
+        setIsLoading(false)
+        return
+      }
+
+      // 本地用户库（静态站点无后端，使用 localStorage 持久化）
+      const USERS_KEY = 'bazi_users'
+      const hash = (s: string) => {
+        // 简单不可逆混淆（非真正安全，仅防止明文 localStorage）
+        let h = 5381
+        for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+        return String(h)
+      }
+      const loadUsers = (): Record<string, string> => {
+        try {
+          return JSON.parse(localStorage.getItem(USERS_KEY) || '{}')
+        } catch {
+          return {}
+        }
+      }
+      const saveUsers = (u: Record<string, string>) => {
+        localStorage.setItem(USERS_KEY, JSON.stringify(u))
+      }
+
+      const users = loadUsers()
+
       if (mode === 'register') {
-        // 验证密码
         if (formData.password.length < 6) {
           setError('密码长度至少6位')
           setIsLoading(false)
           return
         }
-
-        // TODO: 调用注册 API
-        console.log('注册:', formData)
-        // 注册成功后保存 token 和用户名
+        if (users[username]) {
+          setError('该用户名已被注册')
+          setIsLoading(false)
+          return
+        }
+        users[username] = hash(formData.password)
+        saveUsers(users)
         localStorage.setItem('user_token', 'demo_user_token')
-        localStorage.setItem('username', formData.username)
-        alert('注册成功!')
+        localStorage.setItem('username', username)
+        alert('注册成功！')
         onClose()
-        // 刷新页面以更新导航栏
         window.location.reload()
       } else {
-        // TODO: 调用登录 API
-        console.log('登录:', formData)
-        // 登录成功后保存 token 和用户名
+        const stored = users[username]
+        if (!stored) {
+          setError('该用户尚未注册，请先注册')
+          setIsLoading(false)
+          return
+        }
+        if (stored !== hash(formData.password)) {
+          setError('用户名或密码错误')
+          setIsLoading(false)
+          return
+        }
         localStorage.setItem('user_token', 'demo_user_token')
-        localStorage.setItem('username', formData.username)
-        alert('登录成功!')
+        localStorage.setItem('username', username)
+        alert('登录成功！')
         onClose()
-        // 刷新页面以更新导航栏
         window.location.reload()
       }
     } catch (err) {
