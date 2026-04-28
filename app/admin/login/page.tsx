@@ -7,7 +7,7 @@ import { Lock, Mail } from 'lucide-react'
 export default function AdminLogin() {
   const router = useRouter()
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: '',
   })
   const [isLoading, setIsLoading] = useState(false)
@@ -21,11 +21,11 @@ export default function AdminLogin() {
     try {
       // TODO: 调用登录 API
       // 临时验证
-      if (formData.email === 'admin@bazi.com' && formData.password === 'admin123') {
+      if (formData.username === 'aye' && formData.password === 'yy888888') {
         localStorage.setItem('admin_token', 'demo_token')
         router.push('/admin/dashboard')
       } else {
-        setError('邮箱或密码错误')
+        setError('用户名或密码错误')
       }
     } catch (err) {
       setError('登录失败，请重试')
@@ -61,15 +61,15 @@ export default function AdminLogin() {
             {/* 邮箱 */}
             <div>
               <label className="block text-sm font-medium text-bazi-text mb-2">
-                管理员邮箱
+                管理员用户名
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-bazi-muted" />
                 <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="请输入邮箱"
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  placeholder="请输入用户名"
                   required
                   className="w-full pl-10 pr-4 py-3 bg-bazi-bg border-2 border-bazi-border rounded-lg focus:border-bazi-gold focus:outline-none transition-all"
                 />
