@@ -1,7 +1,8 @@
-// 八字分析 API 服务
+// 八字分析 API 服务（直连模式 - 适配 GitHub Pages 静态部署）
 
-// 使用 Next.js API 路由作为代理，避免 CORS 问题
-const API_BASE_URL = '/api/bazi'
+// 使用 AnyNetGate 跨域代理直接访问外部 API
+const PROXY_URL = 'https://anynetgate.cn/?'
+const API_BASE_URL = 'https://baziapi.site'
 
 export interface BaziAnalyzeRequest {
   year: number
@@ -20,62 +21,93 @@ export interface BaziAnalyzeResponse {
 }
 
 /**
- * 调用八字分析 API（通过 Next.js API 路由代理）
- * API 使用异步模式：提交任务 → 轮询结果
+ * 调用八字分析 API
+ * 由于 GitHub Pages 仅支持静态部署，这里直接在浏览器端通过跨域代理调用外部 API。
+ * 流程：提交任务 → 轮询结果（最多 60 次，每次间隔 2 秒）。
  */
 export async function analyzeBazi(
   params: BaziAnalyzeRequest
 ): Promise<BaziAnalyzeResponse> {
   try {
-    // 调用 Next.js API 路由（内部处理异步轮询）
-    const response = await fetch(API_BASE_URL, {
+    const { year, month, day, hour, minute, gender } = params
+
+    if (!year || !month || !day || hour === undefined || minute === undefined || !gender) {
+      return { success: false, data: null, error: '缺少必填参数' }
+    }
+
+    // 1. 提交任务
+    const submitUrl = `${PROXY_URL}${API_BASE_URL}/api/bazi/submit`
+    const submitResponse = await fetch(submitUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(params),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        year,
+        month,
+        day,
+        hour,
+        minute: minute || 0,
+        gender,
+      }),
     })
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+    if (!submitResponse.ok) {
+      throw new Error(`提交任务失败: HTTP ${submitResponse.status}`)
     }
 
-    const result: BaziAnalyzeResponse = await response.json()
-    return result
+    const submitResult = await submitResponse.json()
+    const taskId = submitResult.taskId
+    if (!taskId) {
+      throw new Error('未获取到任务ID')
+    }
+
+    // 2. 轮询结果
+    const maxAttempts = 60
+    const interval = 2000
+
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((resolve) => setTimeout(resolve, interval))
+
+      const resultUrl = `${PROXY_URL}${API_BASE_URL}/api/bazi/result/${taskId}`
+      const resultResponse = await fetch(resultUrl)
+
+      if (!resultResponse.ok) {
+        throw new Error(`查询结果失败: HTTP ${resultResponse.status}`)
+      }
+
+      const result = await resultResponse.json()
+
+      if (result.status === 'completed') {
+        return { success: true, data: result.data, error: null }
+      }
+      if (result.status === 'failed') {
+        return { success: false, data: null, error: result.error || '分析失败' }
+      }
+      // processing → 继续等待
+    }
+
+    return { success: false, data: null, error: '分析超时，请稍后重试' }
   } catch (error) {
     if (error instanceof Error) {
-      return {
-        success: false,
-        data: null,
-        error: error.message,
+      if (error.message.includes('Failed to fetch') || error.message.includes('fetch failed')) {
+        return { success: false, data: null, error: '网络连接不稳定，请稍后重试' }
       }
+      return { success: false, data: null, error: error.message }
     }
-    return {
-      success: false,
-      data: null,
-      error: '未知错误',
-    }
+    return { success: false, data: null, error: '未知错误' }
   }
 }
 
 /**
  * 从用户输入中提取生辰信息
- * 支持格式：
- * - "1990年5月15日10时30分 男"
- * - "1990-05-15 10:30 男"
- * - "出生日期：1990年5月15日，时间：10:30，性别：男"
  */
 export function parseBirthInfo(input: string): BaziAnalyzeRequest | null {
   try {
-    // 提取年月日
     const datePatterns = [
       /(\d{4})[年\-\/](\d{1,2})[月\-\/](\d{1,2})[日]?/,
       /(\d{4})\.(\d{1,2})\.(\d{1,2})/,
     ]
 
     let year = 0, month = 0, day = 0
-
     for (const pattern of datePatterns) {
       const dateMatch = input.match(pattern)
       if (dateMatch) {
@@ -86,14 +118,12 @@ export function parseBirthInfo(input: string): BaziAnalyzeRequest | null {
       }
     }
 
-    // 提取时分
     const timePatterns = [
       /(\d{1,2})[时:](\d{1,2})[分]?/,
       /(\d{1,2}):(\d{1,2})/,
     ]
 
     let hour = 0, minute = 0
-
     for (const pattern of timePatterns) {
       const timeMatch = input.match(pattern)
       if (timeMatch) {
@@ -103,13 +133,11 @@ export function parseBirthInfo(input: string): BaziAnalyzeRequest | null {
       }
     }
 
-    // 提取性别
     let gender: 'male' | 'female' = 'male'
     if (input.includes('女') || input.includes('female')) {
       gender = 'female'
     }
 
-    // 验证数据
     if (
       year < 1900 || year > 2100 ||
       month < 1 || month > 12 ||
@@ -120,14 +148,7 @@ export function parseBirthInfo(input: string): BaziAnalyzeRequest | null {
       return null
     }
 
-    return {
-      year,
-      month,
-      day,
-      hour,
-      minute,
-      gender,
-    }
+    return { year, month, day, hour, minute, gender }
   } catch {
     return null
   }
